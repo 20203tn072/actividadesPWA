@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitacora</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+            color: #212529;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        th,
+        td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        button {
+            font-size: 1em;
+            padding: 10px 15px;
+            margin-top: 20px;
+            cursor: pointer;
+            background-color: #645c5c;
+            color: rgb(255, 253, 253);
+            border: none;
+            border-radius: 5px;
+        }
+
+        button:hover {
+            background-color: #c82333;
+        }
+    </style>
+</head>
+
+<body>
+    <h1 style="text-align: center;">Bitcora</h1>
+    <table id="service-worker-log">
+        <thead>
+            <tr>
+                <th>Proceso</th>
+                <th>Hecho</th>
+                <th>Fecha y Hora (dd-mm-yy hh:mm:ss:ms)</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <button id="clear-log-button">Reiniciar</button>
+
+    <script>
+        const logKey = 'serviceWorkerLog';
+        const tableBody = document.querySelector('#service-worker-log tbody');
+        const clearButton = document.getElementById('clear-log-button');
+        const STATE_ORDER = ['Installing', 'Installed', 'Activating', 'Activated', 'Ocioso'];
+
+        function updateLog(newState) {
+            const log = JSON.parse(localStorage.getItem(logKey) || '[]');
+            const processName = newState.charAt(0).toUpperCase() + newState.slice(1);
+
+            if (processName !== 'Ocioso') {
+                const lastEntry = log[log.length - 1];
+                if (lastEntry && lastEntry.process === processName) return; 
+            }
+
+            log.push({ process: processName, timestamp: getFormattedTimestamp() });
+
+            localStorage.setItem(logKey, JSON.stringify(log));
+
+            const sortedLog = [];
+            STATE_ORDER.forEach(state => {
+                log.forEach(entry => {
+                    if (entry.process === state) sortedLog.push(entry);
+                });
+            });
+
+            tableBody.innerHTML = '';
+            sortedLog.forEach(entry => {
+                const row = tableBody.insertRow();
+                row.insertCell(0).textContent = entry.process;
+                row.insertCell(1).innerHTML = '✔️';
+                row.insertCell(2).textContent = entry.timestamp;
+            });
+        }
+
+        function getFormattedTimestamp() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = String(now.getFullYear()).slice(-2);
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const milliseconds = String(now.getMilliseconds()).padStart(3, '0').slice(0, 2);
+            return `${day}-${month}-${year} ${hours}:${minutes}:${seconds}:${milliseconds}`;
+        }
+
+        async function clearServiceWorkersAndCache() {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let reg of registrations) await reg.unregister();
+
+            const cacheNames = await caches.keys();
+            for (let name of cacheNames) await caches.delete(name);
+
+            localStorage.removeItem(logKey);
+            tableBody.innerHTML = '';
+        }
+
+        async function setupServiceWorker() {
+            if (!('serviceWorker' in navigator)) return;
+
+            await clearServiceWorkersAndCache();
+
+            navigator.serviceWorker.register('/sw.js').then(registration => {
+                if (registration.installing) {
+                    updateLog('installing');
+                    registration.installing.addEventListener('statechange', e => updateLog(e.target.state));
+                }
+
+                if (registration.waiting) {
+                    updateLog('installed');
+                    registration.waiting.addEventListener('statechange', e => updateLog(e.target.state));
+                }
+
+                if (registration.active) {
+                    updateLog('activated');
+                }
+
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    if (newWorker) {
+                        updateLog('installing');
+                        newWorker.addEventListener('statechange', e => updateLog(e.target.state));
+                    }
+                });
+            }).catch(err => console.error('Error registro SW:', err));
+
+            navigator.serviceWorker.addEventListener('message', event => {
+                if (event.data?.status === 'idle') {
+                    updateLog('Ocioso');
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', setupServiceWorker);
+        clearButton.addEventListener('click', setupServiceWorker);
+    </script>
+</body>
+
+</html>
