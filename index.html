@@ -124,7 +124,7 @@
 
             await clearServiceWorkersAndCache();
 
-            navigator.serviceWorker.register('/sw.js').then(registration => {
+            navigator.serviceWorker.register('./sw.js').then(registration => {
                 if (registration.installing) {
                     updateLog('installing');
                     registration.installing.addEventListener('statechange', e => updateLog(e.target.state));
@@ -159,5 +159,6 @@
         clearButton.addEventListener('click', setupServiceWorker);
     </script>
 </body>
+
 
 </html>
